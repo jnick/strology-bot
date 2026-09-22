@@ -13,7 +13,5 @@ class Engine:
     """Ядро бота: обрабатывает нормализованные события, не знает про мессенджеры."""
 
     def process(self, incoming: IncomingMessage) -> List[OutgoingItem]:
-        text = (incoming.text or "").strip()
-        if incoming.payload or text in ("/start", BUTTON_START):
-            return [OutgoingItem.txt(GREETING_1, buttons=[BUTTON_START])]
-        return []
+        # Пока есть только приветствие: отвечаем на любое событие.
+        return [OutgoingItem.txt(GREETING_1, buttons=[BUTTON_START])]
