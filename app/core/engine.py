@@ -14,6 +14,24 @@ from app.core.store import Store, local_today
 
 log = logging.getLogger(__name__)
 
+# Шаги, где используется сохранённая дата рождения, и распознаваемые «Да».
+DATE_CONFIRM_KEYS = ("birth_date",)
+DATE_YES_TOKENS = {
+    "да", "даа", "да,", "использовать", "используй", "да использую",
+    "да используй", "верно", "дальше", "yes", "у", "уа", "ага", "угу", "+",
+}
+
+
+def is_date_yes(value: str) -> bool:
+    v = (value or "").strip()
+    v = "".join(ch for ch in v.lower() if ch not in ",.!?;:…")
+    v = v.strip()
+    if v in DATE_YES_TOKENS:
+        return True
+    if v.startswith("да "):
+        return True
+    return False
+
 
 class Engine:
     """Ядро бота: «/start», меню из 10 действий, лимиты, подписка, сбор данных по шагам.
@@ -87,7 +105,12 @@ class Engine:
         if not action.steps:
             return [self._finish(incoming, action, {})]
         self.sessions.save(incoming.channel, incoming.chat_id, action.slug, 0, {}, "collecting")
-        return [OutgoingItem.txt(self._step_text(action, 0), buttons=[texts.BTN_CANCEL])]
+        return [
+            OutgoingItem.txt(
+                self._step_text(action, 0, {}, incoming),
+                buttons=self._step_buttons(incoming, {}, action, 0),
+            )
+        ]
 
     def _collect(
         self,
@@ -120,18 +143,26 @@ class Engine:
             return [self._finish(incoming, action, sess["answers"])]
 
         step = action.steps[index]
-        value = text.strip()
-        if step.validator:
-            error = step.validator(value)
-            if error:
-                return [
-                    OutgoingItem.txt(
-                        error + "\n\n" + self._step_text(action, index), buttons=[texts.BTN_CANCEL]
-                    )
-                ]
-
         answers = dict(sess["answers"])
-        answers[step.key] = value
+        saved = self._saved_date(incoming, answers, step)
+        value = text.strip()
+
+        if saved and (payload == "date_yes" or is_date_yes(value)):
+            answers[step.key] = saved
+            value = saved
+        else:
+            if step.validator:
+                error = step.validator(value)
+                if error:
+                    return [
+                        OutgoingItem.txt(
+                            error + "\n\n" + self._step_text(action, index, answers, incoming),
+                            buttons=self._step_buttons(incoming, answers, action, index),
+                        )
+                    ]
+            answers[step.key] = value
+            if step.key in DATE_CONFIRM_KEYS:
+                self.store.save_birth_date(incoming.channel, incoming.user_id, value)
         index += 1
 
         if index >= len(action.steps):
@@ -139,18 +170,43 @@ class Engine:
             return [self._finish(incoming, action, answers)]
 
         self.sessions.save(incoming.channel, incoming.chat_id, action.slug, index, answers, "collecting")
-        return [OutgoingItem.txt(self._step_text(action, index), buttons=[texts.BTN_CANCEL])]
+        return [
+            OutgoingItem.txt(
+                self._step_text(action, index, answers, incoming),
+                buttons=self._step_buttons(incoming, answers, action, index),
+            )
+        ]
 
     def _finish(self, incoming: IncomingMessage, action, answers: Dict[str, str]) -> OutgoingItem:
         result = getattr(self.astro, action.slug)(answers)
         return OutgoingItem.txt(result, buttons=[texts.BTN_MENU])
 
-    def _step_text(self, action, index: int) -> str:
+    def _saved_date(self, incoming: IncomingMessage, answers: Dict[str, str], step) -> Optional[str]:
+        """Сохранённая дата, если её можно предложить для этого шага."""
+        if step.key not in DATE_CONFIRM_KEYS:
+            return None
+        if answers.get(step.key):
+            return None
+        return self.store.get_birth_date(incoming.channel, incoming.user_id)
+
+    def _step_text(self, action, index: int, answers: Dict[str, str], incoming: IncomingMessage) -> str:
         step = action.steps[index]
-        text = f"{action.title}. Вопрос {index + 1} из {len(action.steps)}\n{step.prompt}"
-        if step.example:
+        saved = self._saved_date(incoming, answers, step)
+        if saved:
+            prompt = texts.DATE_CONFIRM_TEMPLATE.format(date=saved)
+        else:
+            prompt = step.prompt
+        text = f"{action.title}. Вопрос {index + 1} из {len(action.steps)}\n{prompt}"
+        if not saved and step.example:
             text += f"\nНапример: {step.example}"
         return text
+
+    def _step_buttons(
+        self, incoming: IncomingMessage, answers: Dict[str, str], action, index: int
+    ) -> List[Button]:
+        step = action.steps[index]
+        saved = self._saved_date(incoming, answers, step)
+        return [texts.BTN_DATE_YES, texts.BTN_CANCEL] if saved else [texts.BTN_CANCEL]
 
     # ---------- подписка (админ-команды) ----------
 

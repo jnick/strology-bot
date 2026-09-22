@@ -123,6 +123,64 @@ def test_day_reset():
     assert_ok("новый день сброс", "Гороскоп" in ok[0].text, ok[0].text)
 
 
+def test_birth_date_remembered_and_confirm():
+    tmp = tempfile.mkdtemp()
+    db = Path(tmp) / "t.db"
+    store = store_mod.Store(db)
+    sessions = engine_mod.SessionStore(db)
+    engine_mod.local_today = lambda: FAKE_DAY
+    store_mod.local_today = lambda: FAKE_DAY
+
+    def engine():
+        return engine_mod.Engine(store, sessions)
+
+    # безлимит для сценария (общая БД на все прогоны теста)
+    engine_mod.config.ADMIN_IDS = [42]
+    engine().process(msg(chat="c1", user="42", text="/grant 2030-01-01"))
+
+    # 1. первый прогон: дата вводится и запоминается
+    e1 = engine()
+    e1.process(msg(payload="number"))
+    q = e1.process(msg(text="15.03.1990"))
+    assert_ok("число судьбы по введённой дате", "15.03.1990" in q[0].text, q[0].text)
+    assert_ok("дата сохранена", store.get_birth_date("t", "u1") == "15.03.1990")
+
+    # 2. следующий раз предлагается сохранённая дата (natal, кнопка)
+    e2 = engine()
+    r0 = e2.process(msg(payload="natal"))
+    assert_ok("вопрос «Использовать дату?»", "Использовать 15.03.1990?" in r0[0].text, r0[0].text)
+    assert_ok("кнопка «Да, использовать»", r0[0].buttons[0].callback == "date_yes", str(r0[0].buttons))
+    r1 = e2.process(msg(payload="date_yes"))
+    assert_ok("после «да» — следующий шаг", "Вопрос 2 из 3" in r1[0].text, r1[0].text)
+    r2 = e2.process(msg(text="12:00"))
+    r3 = e2.process(msg(text="Москва"))
+    assert_ok("натал использовал сохранённую дату", "15 марта 1990" in r3[0].text, r3[0].text)
+
+    # 3. текстовое «Да» тоже работает
+    e3 = engine()
+    s0 = e3.process(msg(payload="solar"))
+    assert_ok("соляр: вопрос с сохранённой датой", "Использовать 15.03.1990?" in s0[0].text)
+    s1 = e3.process(msg(text="Да"))
+    assert_ok("текст «Да» принимает сохранённую дату", "Соляр" in s1[0].text, s1[0].text)
+
+    # 4. новая дата: используется и перезаписывает память
+    e4 = engine()
+    n0 = e4.process(msg(payload="number"))
+    assert_ok("число судьбы: вопрос с сохранённой датой", "Использовать 15.03.1990?" in n0[0].text)
+    n1 = e4.process(msg(text="22.07.1988"))
+    assert_ok("новая дата использована", "22.07.1988" in n1[0].text, n1[0].text)
+    assert_ok("память обновлена", store.get_birth_date("t", "u1") == "22.07.1988")
+
+    # 5. невалидный ответ — снова тот же вопрос
+    e5 = engine()
+    m0 = e5.process(msg(payload="number"))
+    m1 = e5.process(msg(text="не-дата"))
+    assert_ok("невалидная дата отклонена",
+              ("Дата должна быть" in m1[0].text) or ("Некорректная дата" in m1[0].text),
+              m1[0].text)
+    assert_ok("вопрос «Использовать?» повторён", "Использовать 22.07.1988?" in m1[0].text, m1[0].text)
+
+
 if __name__ == "__main__":
     test_menu()
     test_free_limit_and_sub_flow()
@@ -131,4 +189,5 @@ if __name__ == "__main__":
     test_moon_no_steps()
     test_cancel_during_collecting()
     test_day_reset()
+    test_birth_date_remembered_and_confirm()
     print("\nALL OK")

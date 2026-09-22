@@ -43,6 +43,17 @@ class Store:
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS birth_dates (
+                channel TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                birth_date TEXT NOT NULL,
+                updated_at REAL,
+                PRIMARY KEY (channel, user_id)
+            )
+            """
+        )
         self._conn.commit()
 
     def is_subscribed(self, channel: str, chat_id: str, today: str) -> bool:
@@ -107,5 +118,25 @@ class Store:
             row = self._conn.execute(
                 "SELECT subscribed_until FROM users WHERE channel=? AND chat_id=?",
                 (channel, chat_id),
+            ).fetchone()
+        return row[0] if row else None
+
+    def save_birth_date(self, channel: str, user_id: str, date: str) -> None:
+        """Запомнить дату рождения пользователя (ДД.ММ.ГГГГ)."""
+        import time
+
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO birth_dates (channel, user_id, birth_date, updated_at) "
+                "VALUES (?, ?, ?, ?)",
+                (channel, user_id, date, time.time()),
+            )
+            self._conn.commit()
+
+    def get_birth_date(self, channel: str, user_id: str) -> Optional[str]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT birth_date FROM birth_dates WHERE channel=? AND user_id=?",
+                (channel, user_id),
             ).fetchone()
         return row[0] if row else None

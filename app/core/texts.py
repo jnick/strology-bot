@@ -36,3 +36,10 @@ NOT_SUBSCRIBED_TEXT = "У вас нет активной подписки. За�
 BTN_MENU = Button("В меню", "menu")
 BTN_CANCEL = Button("Отмена", "cancel")
 BTN_SUB = Button("Подписка", "sub")
+BTN_DATE_YES = Button("Да, использовать", "date_yes")
+
+DATE_CONFIRM_TEMPLATE = (
+    "Ваша сохранённая дата рождения: {date}.\n"
+    "Использовать {date}?\n"
+    "Нажмите «Да, использовать» или напишите «Да» — либо введите новую дату (ДД.ММ.ГГГГ)."
+)
