@@ -89,7 +89,8 @@ def test_natal_steps_and_result():
     assert_ok("шаг 2", "Вопрос 3 из 3" in q2[0].text)
     fin = e.process(msg(text="Москва"))
     assert_ok("результат", "Натальная карта" in fin[0].text, fin[0].text)
-    assert_ok("данные собраны", "birth date: 15.03.1990" in fin[0].text, fin[0].text)
+    assert_ok("данные собраны", "15 марта 1990" in fin[0].text and "Солнце в" in fin[0].text, fin[0].text)
+    assert_ok("упомянут город", "Москва" in fin[0].text, fin[0].text)
     assert_ok("кнопка в меню", fin[0].buttons[0].callback == "menu")
     assert_ok("сессия очищена", e.sessions.get("t", "c1") is None)
 

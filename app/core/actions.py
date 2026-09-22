@@ -4,6 +4,8 @@ import datetime
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
+from app.core.content import SIGN_NAMES
+
 
 @dataclass
 class Step:
@@ -59,6 +61,34 @@ def validate_period(value: str) -> Optional[str]:
     return None
 
 
+_SIGN_DECLINE = {
+    "овна": "Овен", "овне": "Овен", "тельца": "Телец", "тельце": "Телец",
+    "близнецов": "Близнецы", "близнецах": "Близнецы", "рака": "Рак", "раке": "Рак",
+    "льва": "Лев", "льве": "Лев", "девы": "Дева", "деве": "Дева",
+    "весов": "Весы", "весах": "Весы", "скорпиона": "Скорпион", "скорпионе": "Скорпион",
+    "стрельца": "Стрелец", "стрельце": "Стрелец", "козерога": "Козерог", "козероге": "Козерог",
+    "водолея": "Водолей", "водолее": "Водолей", "рыб": "Рыбы", "рыбах": "Рыбы",
+}
+
+
+def validate_sign(value: str) -> Optional[str]:
+    """Возвращает каноническое имя знака (Им. падеж) либо текст ошибки."""
+    v = value.strip().lower()
+    if not v:
+        return "Напишите ваш знак зодиака, например: Овен."
+    if v in _SIGN_DECLINE:
+        return _SIGN_DECLINE[v]
+    for name in SIGN_NAMES:
+        base = name.lower()
+        if v == base:
+            return name
+    for name in SIGN_NAMES:
+        base = name.lower()
+        if len(v) >= 2 and (base.startswith(v) or v.startswith(base)):
+            return name
+    return "Не узнал знак. Напишите один из 12: " + ", ".join(SIGN_NAMES) + "."
+
+
 DATE_PROMPT = "Дата рождения (ДД.ММ.ГГГГ)"
 TIME_PROMPT = "Время рождения (ЧЧ:ММ). Если не знаете — напишите 12:00."
 PLACE_PROMPT = "Место рождения (город)"
@@ -76,7 +106,10 @@ ACTIONS_ORDER = [
     AstroAction(
         "horoscope",
         "Гороскоп",
-        [Step("period", "На какой период прогноз?", "сегодня", validate_period)],
+        [
+            Step("sign", "Ваш знак зодиака", "Овен", validate_sign),
+            Step("period", "На какой период прогноз?", "сегодня", validate_period),
+        ],
     ),
     AstroAction(
         "compat",
