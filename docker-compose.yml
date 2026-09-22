@@ -2,4 +2,6 @@ services:
   strology:
     build: .
     env_file: .env
+    volumes:
+      - ./data:/srv/app/data
     restart: unless-stopped

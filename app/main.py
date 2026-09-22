@@ -8,13 +8,17 @@ from app import config
 from app.channels.max_ch import MaxChannel
 from app.channels.telegram_ch import TelegramChannel
 from app.core.engine import Engine
+from app.core.session import SessionStore
+from app.core.store import Store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("strology")
 
 
 def main() -> None:
-    engine = Engine()
+    store = Store(config.DB_PATH)
+    sessions = SessionStore(config.DB_PATH)
+    engine = Engine(store, sessions)
 
     channels = []
     for name in config.ENABLED_CHANNELS:
